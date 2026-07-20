@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HostRota Prototype v0.5</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--card2:#1f2430;--text:#f5f7fb;--muted:#9aa3b2;--border:#2a3040}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+.app{max-width:760px;margin:0 auto;padding:18px}
+h1{font-size:28px;margin:4px 0 2px}.sub{color:var(--muted);font-size:13px;margin-bottom:18px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.between{justify-content:space-between}
+input,select,button,textarea{font:inherit;border-radius:10px;border:1px solid var(--border)}
+input,select,textarea{background:var(--card2);color:var(--text);padding:10px 12px}
+button{background:#fff;color:#111;padding:10px 14px;font-weight:700;cursor:pointer}
+button.secondary{background:var(--card2);color:var(--text)}
+.plan-group{display:flex;gap:8px;margin-top:8px}.plan-btn{flex:1;min-width:80px;background:var(--card2);color:var(--text)}
+.plan-btn.active{background:#fff;color:#111;border-color:#fff}
+.cast-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.cast{padding:10px;background:var(--card2);border-radius:10px;border:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.dot{width:12px;height:12px;border-radius:999px;flex:0 0 auto}.waiting{background:#34c759}.first{background:#ffcc00}.shimei{background:#ff3b30}.champagne{background:#af52de}.break{background:#8e8e93}
+.small{font-size:12px;color:var(--muted)}.section-title{font-size:18px;font-weight:800}.field-block{margin-top:12px}label{font-size:13px;color:var(--muted)}
+.schedule{width:100%;border-collapse:collapse;margin-top:12px}.schedule th,.schedule td{border-bottom:1px solid var(--border);padding:8px 4px;text-align:left}.schedule select,.schedule input{width:100%}
+.copybox{width:100%;min-height:220px;margin-top:10px;resize:vertical}
+@media(max-width:420px){.cast-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<div class="app">
+<h1>HostRota</h1>
+<div class="sub">ホストクラブ付け回し管理 プロトタイプ Ver.0.5</div>
+
+<div class="card">
+  <div class="row between">
+    <div class="section-title">キャスト状況</div>
+    <button class="secondary" onclick="resetStatuses()">全員待機</button>
+  </div>
+  <div class="small">16人登録済み。タップすると状態を変更できます。</div>
+  <div id="castGrid" class="cast-grid">
+    <div class="cast" data-index="0"><span class="dot waiting"></span><div><strong>れいや</strong><div class="small">待機</div></div></div>
+    <div class="cast" data-index="1"><span class="dot waiting"></span><div><strong>爽</strong><div class="small">待機</div></div></div>
+    <div class="cast" data-index="2"><span class="dot waiting"></span><div><strong>一護</strong><div class="small">待機</div></div></div>
+    <div class="cast" data-index="3"><span class="dot waiting"></span><div><strong>葉月</strong><div class="small">待機</div></div></div>
+    <div class="cast" data-index="4"><span class="dot waiting"></span><div><strong>アヤト</strong><div class="small">待機</div></div></div>
+    <div class="cast" data-index="5"><span class="dot waiting"></span><div><strong>七翔</strong><div class="small">待機</div></div></div>
+    <div class="cast" data-index="6"><span class="dot waiting"></span><div><strong>なぎさ</strong><div class="small">待機</div></div></div>
+    <div class="cast" data-index="7"><span class="dot waiting"></span><div><strong>湊</strong><div class="small">待機</div></div></div>
+    <div class="cast" data-index="8"><span class="dot waiting"></span><div><strong>ゆうすけ</strong><div class="small">待機</div></div></div>
+    <div class="cast" data-index="9"><span class="dot waiting"></span><div><strong>りゅう</strong><div class="small">待機</div></div></div>
+    <div class="cast" data-index="10"><span class="dot waiting"></span><div><strong>つかさ</strong><div class="small">待機</div></div></div>
+    <div class="cast" data-index="11"><span class="dot waiting"></span><div><strong>あきら</strong><div class="small">待機</div></div></div>
+    <div class="cast" data-index="12"><span class="dot waiting"></span><div><strong>なち</strong><div class="small">待機</div></div></div>
+    <div class="cast" data-index="13"><span class="dot waiting"></span><div><strong>ソラ</strong><div class="small">待機</div></div></div>
+    <div class="cast" data-index="14"><span class="dot waiting"></span><div><strong>長門</strong><div class="small">待機</div></div></div>
+    <div class="cast" data-index="15"><span class="dot waiting"></span><div><strong>せーや</strong><div class="small">待機</div></div></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title">付け回し作成</div>
+  <div class="field-block">
+    <label>プラン</label>
+    <div class="plan-group">
+      <button class="plan-btn" data-plan="Aプラン" onclick="selectPlan('Aプラン')">Aプラン</button>
+      <button class="plan-btn active" data-plan="Bプラン" onclick="selectPlan('Bプラン')">Bプラン</button>
+      <button class="plan-btn" data-plan="Cプラン" onclick="selectPlan('Cプラン')">Cプラン</button>
+    </div>
+  </div>
+  <div class="row" style="margin-top:14px">
+    <label>見出し <input id="room" value="A3"></label>
+    <label>開始 <input id="start" type="time" value="20:55"></label>
+    <label>間隔(分) <input id="interval" type="number" value="7" min="1"></label>
+    <label>人数 <input id="count" type="number" value="8" min="1" max="30"></label>
+    <button onclick="generateRows()">時間を作成</button>
+  </div>
+  <table class="schedule">
+    <thead><tr><th style="width:80px">時間</th><th>キャスト</th><th>相手</th></tr></thead>
+    <tbody id="scheduleBody">
+      <tr><td>20:55</td><td>れいや</td><td>爽</td></tr>
+      <tr><td>21:02</td><td>一護</td><td>葉月</td></tr>
+      <tr><td>21:09</td><td>アヤト</td><td>七翔</td></tr>
+      <tr><td>21:16</td><td>なぎさ</td><td>湊</td></tr>
+      <tr><td>21:23</td><td>ゆうすけ</td><td>りゅう</td></tr>
+      <tr><td>21:30</td><td>つかさ</td><td>あきら</td></tr>
+      <tr><td>21:37</td><td>なち</td><td>ソラ</td></tr>
+      <tr><td>21:44</td><td>長門</td><td>せーや</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="row between"><div class="section-title">LINE用テキスト</div><button onclick="copyLineText()">コピー</button></div>
+  <textarea id="lineText" class="copybox">@All
+
+A3
+
+Bプラン
+
+20:55れいや　爽
+21:02一護　葉月
+21:09アヤト　七翔
+21:16なぎさ　湊
+21:23ゆうすけ　りゅう
+21:30つかさ　あきら
+21:37なち　ソラ
+21:44長門　せーや</textarea>
+</div>
+</div>
+
+<script>
+const names=["れいや","爽","一護","葉月","アヤト","七翔","なぎさ","湊","ゆうすけ","りゅう","つかさ","あきら","なち","ソラ","長門","せーや"];
+const statusList=[
+ {label:"待機",cls:"waiting"},
+ {label:"初回中",cls:"first"},
+ {label:"指名中",cls:"shimei"},
+ {label:"シャンパン",cls:"champagne"},
+ {label:"休憩",cls:"break"}
+];
+let selectedPlan="Bプラン";
+let castStatus=Array(16).fill(0);
+
+function bindCastClicks(){
+ document.querySelectorAll(".cast").forEach(el=>{
+   el.onclick=()=>{
+     const i=Number(el.dataset.index);
+     castStatus[i]=(castStatus[i]+1)%statusList.length;
+     const s=statusList[castStatus[i]];
+     el.querySelector(".dot").className="dot "+s.cls;
+     el.querySelector(".small").textContent=s.label;
+   };
+ });
+}
+function resetStatuses(){
+ castStatus.fill(0);
+ document.querySelectorAll(".cast").forEach(el=>{
+   el.querySelector(".dot").className="dot waiting";
+   el.querySelector(".small").textContent="待機";
+ });
+}
+function selectPlan(plan){
+ selectedPlan=plan;
+ document.querySelectorAll(".plan-btn").forEach(b=>b.classList.toggle("active",b.dataset.plan===plan));
+ updateLineText();
+}
+function addMinutes(t,mins){
+ const [h,m]=t.split(":").map(Number);
+ let total=h*60+m+mins;
+ total%=1440;
+ return String(Math.floor(total/60)).padStart(2,"0")+":"+String(total%60).padStart(2,"0");
+}
+function generateRows(){
+ const start=document.getElementById("start").value||"20:55";
+ const interval=Number(document.getElementById("interval").value||7);
+ const count=Number(document.getElementById("count").value||8);
+ const body=document.getElementById("scheduleBody");
+ body.innerHTML="";
+ for(let i=0;i<count;i++){
+   const tr=document.createElement("tr");
+   tr.innerHTML=`<td><input class="timeInput" value="${addMinutes(start,interval*i)}"></td>
+   <td><select class="castSelect">${names.map(n=>`<option>${n}</option>`).join("")}</select></td>
+   <td><input class="partnerInput" placeholder="相手名"></td>`;
+   body.appendChild(tr);
+ }
+ body.querySelectorAll("input,select").forEach(e=>e.addEventListener("input",updateLineText));
+ updateLineText();
+}
+function updateLineText(){
+ const room=document.getElementById("room").value.trim();
+ const rows=[...document.querySelectorAll("#scheduleBody tr")];
+ let lines=["@All","",room,"",selectedPlan,""];
+ rows.forEach(r=>{
+   const ti=r.querySelector(".timeInput");
+   const cs=r.querySelector(".castSelect");
+   const pi=r.querySelector(".partnerInput");
+   const t=ti?ti.value:r.cells[0].textContent;
+   const c=cs?cs.value:r.cells[1].textContent;
+   const p=pi?pi.value:r.cells[2].textContent;
+   lines.push(`${t}${c}　${p}`);
+ });
+ document.getElementById("lineText").value=lines.join("\n");
+}
+async function copyLineText(){
+ updateLineText();
+ const box=document.getElementById("lineText");
+ try{await navigator.clipboard.writeText(box.value);alert("コピーしました");}
+ catch(e){box.select();document.execCommand("copy");alert("コピーしました");}
+}
+bindCastClicks();
+document.getElementById("room").addEventListener("input",updateLineText);
+</script>
+</body>
+</html>
