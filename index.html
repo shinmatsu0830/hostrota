@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HostRota Prototype v0.16</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--card2:#1f2430;--text:#f5f7fb;--muted:#9aa3b2;--border:#2a3040;--danger:#ff453a;--ok:#34c759}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+.app{max-width:900px;margin:0 auto;padding:18px}
+h1{font-size:28px;margin:4px 0 2px}.sub{color:var(--muted);font-size:13px;margin-bottom:18px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.between{justify-content:space-between}
+input,select,button,textarea{font:inherit;border-radius:10px;border:1px solid var(--border)}
+input,select,textarea{background:var(--card2);color:var(--text);padding:10px 12px}
+button{background:#fff;color:#111;padding:10px 14px;font-weight:700;cursor:pointer}
+button.secondary{background:var(--card2);color:var(--text)}
+.small{font-size:12px;color:var(--muted)}.section-title{font-size:18px;font-weight:800}
+.cast-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.cast{padding:10px;background:var(--card2);border-radius:10px;border:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cast-main{display:flex;align-items:center;gap:8px}.rank-select{min-width:72px;padding:7px 8px}.cast-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.start-time{width:92px;padding:7px 8px}
+.dot{width:12px;height:12px;border-radius:999px}.waiting{background:#34c759}.first{background:#ffcc00}.shimei{background:#ff3b30}.champagne{background:#af52de}.break{background:#8e8e93}
+.tabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-top:10px}.tab-btn{white-space:nowrap;background:var(--card2);color:var(--text)}.tab-btn.active{background:#fff;color:#111}
+.plan-group{display:flex;gap:8px;margin-top:8px}.plan-btn{flex:1;background:var(--card2);color:var(--text)}.plan-btn.active{background:#fff;color:#111}
+.photo-box{margin-top:14px;padding:12px;background:var(--card2);border-radius:12px;border:1px solid var(--border)}
+.guest-card{padding:12px 0;border-bottom:1px solid var(--border)}.guest-card:last-child{border-bottom:none}
+.photo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}.photo-grid select{width:100%}
+.schedule-wrap{overflow-x:auto;margin-top:14px}.schedule{width:100%;border-collapse:collapse;min-width:560px}
+.schedule th,.schedule td{border-bottom:1px solid var(--border);padding:8px 5px;text-align:left}.schedule select{width:100%}
+.copybox{width:100%;min-height:260px;margin-top:10px;resize:vertical}
+.badge{display:inline-block;padding:3px 7px;border-radius:999px;background:var(--card2);font-size:12px;color:var(--muted)}
+.alert{padding:12px;border-radius:12px;margin-top:12px;border:1px solid var(--border)}
+.alert.ok{border-color:var(--ok)}.alert.danger{border-color:var(--danger)}
+.conflict-item{margin-top:6px}
+.group-title{font-weight:800;margin-top:12px}
+</style>
+</head>
+<body>
+<div class="app">
+<h1>HostRota</h1>
+<div class="sub">ホストクラブ付け回し管理 プロトタイプ Ver.0.16</div>
+
+<div class="card">
+  <div class="row between">
+    <div class="section-title">キャスト状況・ランク</div>
+    <button class="secondary" onclick="resetStatuses()">全員待機</button>
+  </div>
+  <div class="small">名前側をタップすると状態変更。右側でランクA/B/Cと出勤時間を設定できます。休み・出勤前のキャストは自動作成から除外されます。</div>
+  <div class="row between" style="margin-top:12px">
+    <div class="row">
+      <input id="newCastName" placeholder="キャスト名">
+      <button onclick="addCast()">＋ キャスト追加</button>
+    </div>
+    <div class="badge">本日の出勤人数：<strong id="attendanceCount">0</strong>人</div>
+  </div>
+  <div id="castGrid" class="cast-grid"></div>
+</div>
+
+<div class="card">
+  <div class="row between">
+    <div class="section-title">初回ごとの付け回し</div>
+    <button onclick="addGroup()">＋ 初回を追加</button>
+  </div>
+  <div class="small">初回ごとにタブを分けて管理できます。最初の1巡目は手動、2巡目以降はそのタブだけ自動作成。出勤人数が奇数で2人組初回の場合、最後の枠は1人だけ配置します。他タブの既存スケジュールは維持し、全タブ横断で時間重複をチェックします。</div>
+  <div id="tabs" class="tabs"></div>
+
+  <div id="groupEditor"></div>
+
+  <div id="conflictBox"></div>
+</div>
+
+
+</div>
+
+<script>
+let names=["れいや","爽","一護","葉月","アヤト","七翔","なぎさ","湊","ゆうすけ","りゅう","つかさ","あきら","なち","ソラ","長門","せーや"];
+const statusList=[
+ {label:"待機",cls:"waiting"},
+ {label:"初回中",cls:"first"},
+ {label:"指名中",cls:"shimei"},
+ {label:"シャンパン",cls:"champagne"},
+ {label:"休み",cls:"break"}
+];
+let castStatus=Array(names.length).fill(0);
+let castRanks=names.map((_,i)=> i<6 ? "A" : (i<11 ? "B" : "C"));
+let castStartTimes=names.map(()=> "20:00");
+let groups=[];
+let activeGroupId=null;
+let nextGroupId=1;
+
+function newGroup(){
+ return {
+   id:nextGroupId++,
+   title:"",
+   plan:"Bプラン",
+   start:"20:55",
+   interval:5,
+   guestCount:2,
+   roundCount:8,
+   photoLeft:[],
+   photoRight:[],
+   firstLeft:"",
+   firstRight:"",
+   firstSingle:"",
+   assignments:[]
+ };
+}
+function ensureInitial(){
+ if(!groups.length){const g=newGroup();groups.push(g);activeGroupId=g.id;}
+}
+
+function attendanceCount(){
+ return names.filter((_,i)=>castStatus[i]!==4).length;
+}
+function recommendedRounds(guestCount){
+ const count=attendanceCount();
+ if(guestCount===2) return Math.max(1,Math.ceil(count/2));
+ return Math.max(1,count);
+}
+function recalcGroupTiming(g){
+ g.roundCount=recommendedRounds(g.guestCount);
+ g.interval=g.roundCount<=1 ? 50 : 50/(g.roundCount-1);
+}
+function updateAttendanceCount(){
+ const el=document.getElementById("attendanceCount");
+ if(el)el.textContent=attendanceCount();
+ groups.forEach(g=>recalcGroupTiming(g));
+}
+function renderCasts(){
+ const grid=document.getElementById("castGrid");grid.innerHTML="";
+ names.forEach((n,i)=>{
+   const s=statusList[castStatus[i]];
+   const el=document.createElement("div");el.className="cast";
+   el.innerHTML=`
+     <div class="cast-main">
+       <span class="dot ${s.cls}"></span>
+       <div><strong>${n}</strong><div class="small">${s.label}</div></div>
+     </div>
+     <div class="cast-controls">
+       <select class="rank-select">
+         <option value="A" ${castRanks[i]==="A"?"selected":""}>ランクA</option>
+         <option value="B" ${castRanks[i]==="B"?"selected":""}>ランクB</option>
+         <option value="C" ${castRanks[i]==="C"?"selected":""}>ランクC</option>
+       </select>
+       <input class="start-time" type="time" value="${castStartTimes[i]}">
+     </div>`;
+   el.querySelector(".cast-main").onclick=()=>{
+     castStatus[i]=(castStatus[i]+1)%statusList.length;
+     renderCasts();
+     renderGroupEditor();
+   };
+   el.querySelector(".rank-select").onchange=e=>{castRanks[i]=e.target.value;};
+   el.querySelector(".start-time").onchange=e=>{castStartTimes[i]=e.target.value;};
+   grid.appendChild(el);
+ });
+ updateAttendanceCount();
+}
+function resetStatuses(){castStatus.fill(0);renderCasts();renderGroupEditor();}
+function addCast(){
+ const input=document.getElementById("newCastName");
+ const name=(input.value||"").trim();
+ if(!name)return;
+ if(names.includes(name)){alert("同じ名前のキャストがすでに登録されています。");return;}
+ names.push(name);
+ castStatus.push(0);
+ castRanks.push("B");
+ castStartTimes.push("20:00");
+ input.value="";
+ renderCasts();
+ updateAttendanceCount();
+ renderGroupEditor();
+}
+function getRank(name){const i=names.indexOf(name);return i>=0?castRanks[i]:"B";}
+function priorityCastNames(){
+ const waiting=names.filter((_,i)=>castStatus[i]===0);
+ const others=names.filter((_,i)=>castStatus[i]!==0 && castStatus[i]!==4);
+ return [...waiting,...others];
+}
+function rankPairScore(a,b){
+ const pair=[getRank(a),getRank(b)].sort().join("");
+ if(pair==="AC")return 100;
+ if(pair==="BB")return 90;
+ if(pair==="AB")return 80;
+ if(pair==="BC")return 70;
+ if(pair==="AA")return 60;
+ if(pair==="CC")return 50;
+ return 0;
+}
+function addGroup(){
+ const g=newGroup();
+ groups.push(g);activeGroupId=g.id;
+ renderTabs();renderGroupEditor();updateLineText();
+}
+function removeActiveGroup(){
+ if(groups.length<=1)return;
+ groups=groups.filter(g=>g.id!==activeGroupId);
+ activeGroupId=groups[0].id;
+ renderTabs();renderGroupEditor();updateLineText();
+}
+function currentGroup(){return groups.find(g=>g.id===activeGroupId);}
+function renderTabs(){
+ const tabs=document.getElementById("tabs");tabs.innerHTML="";
+ groups.forEach((g,idx)=>{
+   const b=document.createElement("button");
+   b.className="tab-btn"+(g.id===activeGroupId?" active":"");
+   b.textContent=g.title||`初回${idx+1}`;
+   b.onclick=()=>{saveEditorToGroup();activeGroupId=g.id;renderTabs();renderGroupEditor();detectConflicts();};
+   tabs.appendChild(b);
+ });
+}
+function optionList(selected=""){
+ return '<option value="">未選択</option>'+names.map(n=>`<option value="${n}" ${selected===n?"selected":""}>${n}（${getRank(n)}）</option>`).join("");
+}
+function renderGroupEditor(){
+ const g=currentGroup();
+ if(g)recalcGroupTiming(g);
+ const box=document.getElementById("groupEditor");
+ if(!g){box.innerHTML="";return;}
+ box.innerHTML=`
+ <div style="margin-top:14px">
+   <div class="row between">
+     <strong>${g.title||"初回タブ"}</strong>
+     <button class="secondary" onclick="removeActiveGroup()">この初回を削除</button>
+   </div>
+   <div class="row" style="margin-top:12px">
+     <label>見出し <input id="gTitle" value="${g.title}"></label>
+     <label>開始 <input id="gStart" type="time" value="${g.start}"></label>
+     <label>終了 <input id="gEnd" type="time" value="${addMinutes(g.start,50)}" readonly></label>
+     <label>初回人数 <input id="gGuestCount" type="number" value="${g.guestCount}" min="1" max="2"></label>
+     <label>付け回し回数 <input id="gRoundCount" type="number" value="${g.roundCount}" readonly></label>
+     <label>自動間隔 <input id="gInterval" type="number" value="${g.interval}" readonly>分</label>
+   </div>
+   <div style="margin-top:12px">
+     <label>プラン</label>
+     <div class="plan-group">
+       ${["Aプラン","Bプラン","Cプラン"].map(p=>`<button class="plan-btn ${g.plan===p?"active":""}" onclick="setGroupPlan('${p}')">${p}</button>`).join("")}
+     </div>
+   </div>
+   <div id="photoArea"></div>
+
+   <div class="photo-box">
+     <div class="row between">
+       <strong>最初につくキャスト</strong>
+       <span class="badge">1巡目は手動</span>
+     </div>
+     <div class="small">初回2人の場合は、最初の2人を手動でペア決めします。2巡目以降だけ自動作成します。</div>
+     <div id="firstPairArea" class="row" style="margin-top:10px"></div>
+   </div>
+
+   <div class="row" style="margin-top:14px">
+     <button onclick="generateCurrentGroup()">この初回だけ自動作成</button>
+     <button class="secondary" onclick="detectConflicts()">重複チェック</button>
+   </div>
+
+   <div class="schedule-wrap">
+     <table class="schedule">
+       <thead id="scheduleHead"></thead>
+       <tbody id="scheduleBody"></tbody>
+     </table>
+   </div>
+
+   <div class="photo-box" style="margin-top:14px">
+     <div class="row between">
+       <strong>この初回のLINE用テキスト</strong>
+       <button onclick="copyCurrentGroupLine()">コピー</button>
+     </div>
+     <textarea id="groupLineText" class="copybox" style="min-height:220px"></textarea>
+   </div>
+ </div>`;
+ renderPhotoArea();
+ renderFirstPairArea();
+ renderScheduleForGroup();
+ updateCurrentGroupLineText();
+ ["gTitle","gStart","gGuestCount"].forEach(id=>{
+   document.getElementById(id).addEventListener("input",()=>{
+     saveEditorToGroup();
+     recalcGroupTiming(g);
+     if(id==="gGuestCount"){renderPhotoArea();renderFirstPairArea();}
+     if(id==="gStart"||id==="gGuestCount")renderGroupEditor();
+     renderTabs();updateLineText();
+   });
+ });
+}
+function saveEditorToGroup(){
+ const g=currentGroup();if(!g)return;
+ const e=id=>document.getElementById(id);
+ if(e("gTitle"))g.title=e("gTitle").value;
+ if(e("gStart"))g.start=e("gStart").value;
+ if(e("gGuestCount"))g.guestCount=Math.max(1,Math.min(2,Number(e("gGuestCount").value||1)));
+ recalcGroupTiming(g);
+}
+function setGroupPlan(plan){
+ saveEditorToGroup();currentGroup().plan=plan;renderGroupEditor();updateLineText();
+}
+function renderPhotoArea(){
+ const g=currentGroup();const area=document.getElementById("photoArea");
+ if(!g||g.plan!=="Bプラン"){area.innerHTML="";return;}
+ if(g.guestCount===2){
+   area.innerHTML=`
+   <div class="photo-box">
+     <div class="row between"><strong>Bプラン 写真指名</strong><span class="badge">左右それぞれ最大5名</span></div>
+     <div class="small">画面の位置関係どおり、左列が左のお客さん・右列が右のお客さんです。</div>
+     <div class="guest-card">
+       <strong>左のお客さん</strong>
+       <div class="photo-grid">${[0,1,2,3,4].map(i=>`<select class="photoLeft">${optionList(g.photoLeft[i]||"")}</select>`).join("")}</div>
+     </div>
+     <div class="guest-card">
+       <strong>右のお客さん</strong>
+       <div class="photo-grid">${[0,1,2,3,4].map(i=>`<select class="photoRight">${optionList(g.photoRight[i]||"")}</select>`).join("")}</div>
+     </div>
+   </div>`;
+   document.querySelectorAll(".photoLeft").forEach((s,i)=>s.onchange=()=>{g.photoLeft[i]=s.value;updateLineText();});
+   document.querySelectorAll(".photoRight").forEach((s,i)=>s.onchange=()=>{g.photoRight[i]=s.value;updateLineText();});
+ } else {
+   area.innerHTML=`<div class="photo-box"><strong>Bプラン 写真指名</strong><div class="small">2人組のときに左右別の写真指名欄が表示されます。</div></div>`;
+ }
+}
+
+function renderFirstPairArea(){
+ const g=currentGroup();
+ const area=document.getElementById("firstPairArea");
+ if(!g||!area)return;
+
+ if(g.guestCount===2){
+   area.innerHTML=`
+     <label>左
+       <select id="firstLeft">${optionList(g.firstLeft||"")}</select>
+     </label>
+     <label>右
+       <select id="firstRight">${optionList(g.firstRight||"")}</select>
+     </label>`;
+   document.getElementById("firstLeft").onchange=e=>{g.firstLeft=e.target.value;detectConflicts();};
+   document.getElementById("firstRight").onchange=e=>{g.firstRight=e.target.value;detectConflicts();};
+ }else{
+   area.innerHTML=`
+     <label>最初のキャスト
+       <select id="firstSingle">${optionList(g.firstSingle||"")}</select>
+     </label>`;
+   document.getElementById("firstSingle").onchange=e=>{g.firstSingle=e.target.value;detectConflicts();};
+ }
+}
+function addMinutes(time,mins){
+ const [h,m]=time.split(":").map(Number);
+ let total=Math.round(h*60+m+mins)%1440;
+ return String(Math.floor(total/60)).padStart(2,"0")+":"+String(total%60).padStart(2,"0");
+}
+function timeToMin(t){const [h,m]=t.split(":").map(Number);return h*60+m;}
+function castAvailableAt(name,time){
+ const i=names.indexOf(name);
+ if(i<0)return false;
+ if(castStatus[i]===4)return false;
+ return timeToMin(time) >= timeToMin(castStartTimes[i]||"00:00");
+}
+function overlaps(aStart,aDur,bStart,bDur){
+ const a=timeToMin(aStart),b=timeToMin(bStart);
+ return a < b+bDur && b < a+aDur;
+}
+function castBusyInOtherGroups(cast,time,duration,excludeGroupId){
+ for(const g of groups){
+   if(g.id===excludeGroupId)continue;
+   for(const a of g.assignments){
+     if(a.cast===cast && overlaps(time,duration,a.time,g.interval))return true;
+   }
+ }
+ return false;
+}
+function castUsedInSameGroup(cast,g){
+ return g.assignments.some(a=>a.cast===cast);
+}
+function choosePairForGroup(g,time){
+ const available=priorityCastNames().filter(n=>
+   castAvailableAt(n,time) &&
+   !castUsedInSameGroup(n,g) &&
+   !castBusyInOtherGroups(n,time,g.interval,g.id)
+ );
+ if(available.length===0)return {left:"",right:""};
+ if(available.length===1)return {left:available[0],right:""};
+
+ const leftPref=g.photoLeft.filter(Boolean);
+ const rightPref=g.photoRight.filter(Boolean);
+
+ let best=null;
+ for(const left of available){
+   for(const right of available){
+     if(left===right)continue;
+     let score=rankPairScore(left,right);
+     if(leftPref.includes(left))score+=1000;
+     if(rightPref.includes(right))score+=1000;
+     if(leftPref.includes(right))score-=50;
+     if(rightPref.includes(left))score-=50;
+     if(castStatus[names.indexOf(left)]===0)score+=20;
+     if(castStatus[names.indexOf(right)]===0)score+=20;
+     if(!best||score>best.score)best={left,right,score};
+   }
+ }
+ return best||{left:available[0],right:available[1]};
+}
+function generateGroup(g){
+ g.assignments=[];
+
+ // 1巡目は手動で設定したキャストをそのまま使う
+ if(g.guestCount===2){
+   g.assignments.push({time:g.start,side:"left",cast:g.firstLeft||""});
+   g.assignments.push({time:g.start,side:"right",cast:g.firstRight||""});
+ }else{
+   g.assignments.push({time:g.start,guest:1,cast:g.firstSingle||""});
+ }
+
+ // 2巡目以降だけ自動作成
+ for(let r=1;r<g.roundCount;r++){
+   const time=addMinutes(g.start,g.roundCount<=1?0:(50*r/(g.roundCount-1)));
+
+   if(g.guestCount===2){
+     const pair=choosePairForGroup(g,time);
+     g.assignments.push({time,side:"left",cast:pair.left});
+     g.assignments.push({time,side:"right",cast:pair.right});
+   }else{
+     const usedThisTime=new Set();
+     for(let guest=1;guest<=g.guestCount;guest++){
+       const cast=priorityCastNames().find(n=>
+         castAvailableAt(n,time)&&
+         !castUsedInSameGroup(n,g)&&
+         !usedThisTime.has(n)&&
+         !castBusyInOtherGroups(n,time,g.interval,g.id)
+       )||"";
+       if(cast)usedThisTime.add(cast);
+       g.assignments.push({time,guest,cast});
+     }
+   }
+ }
+}
+function generateCurrentGroup(){
+ saveEditorToGroup();
+ const g=currentGroup();
+ if(!g)return;
+
+ if(g.guestCount===2){
+   if(!g.firstLeft || !g.firstRight){
+     alert("最初につく左・右のキャスト2人を手動で選んでください。");
+     return;
+   }
+   if(g.firstLeft===g.firstRight){
+     alert("最初につく2人は別のキャストを選んでください。");
+     return;
+   }
+   if(!castAvailableAt(g.firstLeft,g.start) || !castAvailableAt(g.firstRight,g.start)){
+     alert("最初につくキャストに、休みまたは出勤時間前のキャストが含まれています。");
+     return;
+   }
+ }else if(!g.firstSingle){
+   alert("最初につくキャストを手動で選んでください。");
+   return;
+ }else if(!castAvailableAt(g.firstSingle,g.start)){
+   alert("最初につくキャストが休み、または出勤時間前です。");
+   return;
+ }
+
+ // このタブだけを再生成。他タブはそのまま保持。
+ g.assignments=[];
+ generateGroup(g);
+
+ renderGroupEditor();
+ detectConflicts();
+ updateLineText();
+}
+function renderScheduleForGroup(){
+ const g=currentGroup();const head=document.getElementById("scheduleHead"),body=document.getElementById("scheduleBody");
+ if(!head||!body)return;
+ body.innerHTML="";
+ if(g.guestCount===2){
+   head.innerHTML="<tr><th>時間</th><th>左</th><th>右</th></tr>";
+   const grouped={};
+   g.assignments.forEach((a,idx)=>{
+     if(!grouped[a.time])grouped[a.time]={time:a.time,left:"",right:"",leftIdx:null,rightIdx:null};
+     if(a.side==="left"){grouped[a.time].left=a.cast;grouped[a.time].leftIdx=idx;}
+     if(a.side==="right"){grouped[a.time].right=a.cast;grouped[a.time].rightIdx=idx;}
+   });
+   Object.values(grouped).forEach(r=>{
+     const tr=document.createElement("tr");
+     tr.innerHTML=`<td>${r.time}</td>
+       <td><select class="manualCast" data-index="${r.leftIdx}">${optionList(r.left)}</select></td>
+       <td><select class="manualCast" data-index="${r.rightIdx}">${optionList(r.right)}</select></td>`;
+     body.appendChild(tr);
+   });
+ }else{
+   head.innerHTML="<tr><th>時間</th><th>初回</th><th>キャスト</th></tr>";
+   g.assignments.forEach((a,idx)=>{
+     const tr=document.createElement("tr");
+     tr.innerHTML=`<td>${a.time}</td><td>初回${a.guest}</td><td><select class="manualCast" data-index="${idx}">${optionList(a.cast)}</select></td>`;
+     body.appendChild(tr);
+   });
+ }
+ document.querySelectorAll(".manualCast").forEach(s=>{
+   s.onchange=()=>{g.assignments[Number(s.dataset.index)].cast=s.value;detectConflicts();updateLineText();};
+ });
+}
+function detectConflicts(){
+ const conflicts=[];
+ const active=currentGroup();
+
+ for(let i=0;i<groups.length;i++){
+   for(const a of groups[i].assignments){
+     if(!a.cast)continue;
+     for(let j=i+1;j<groups.length;j++){
+       for(const b of groups[j].assignments){
+         if(a.cast===b.cast && overlaps(a.time,groups[i].interval,b.time,groups[j].interval)){
+           conflicts.push({
+             cast:a.cast,
+             groupA:groups[i],
+             timeA:a.time,
+             groupB:groups[j],
+             timeB:b.time,
+             involvesActive:active && (groups[i].id===active.id || groups[j].id===active.id)
+           });
+         }
+       }
+     }
+   }
+ }
+
+ const box=document.getElementById("conflictBox");
+ const activeConflicts=conflicts.filter(c=>c.involvesActive);
+
+ if(!conflicts.length){
+   box.innerHTML='<div class="alert ok"><strong>重複なし</strong><div class="small">現在、全タブで同じキャストの時間被りはありません。</div></div>';
+ }else if(activeConflicts.length){
+   box.innerHTML='<div class="alert danger"><strong>この初回に時間重複があります</strong>'+
+     activeConflicts.map(c=>`<div class="conflict-item">${c.cast}：${c.groupA.title||"初回"} ${c.timeA} と ${c.groupB.title||"初回"} ${c.timeB}</div>`).join("")+
+     '</div>';
+ }else{
+   box.innerHTML='<div class="alert danger"><strong>他の初回同士に時間重複があります</strong>'+
+     conflicts.map(c=>`<div class="conflict-item">${c.cast}：${c.groupA.title||"初回"} ${c.timeA} と ${c.groupB.title||"初回"} ${c.timeB}</div>`).join("")+
+     '</div>';
+ }
+ return conflicts;
+}
+function getPhotoSummary(g){
+ if(g.plan!=="Bプラン"||g.guestCount!==2)return [];
+ const left=[...new Set(g.photoLeft.filter(Boolean))],right=[...new Set(g.photoRight.filter(Boolean))];
+ if(!left.length&&!right.length)return [];
+ return ["【写真指名】",`左：${left.length?left.join("・"):"なし"}`,`右：${right.length?right.join("・"):"なし"}`,""];
+}
+function currentGroupLineLines(){
+ const g=currentGroup();
+ if(!g)return [];
+
+ const idx=groups.findIndex(x=>x.id===g.id);
+ const lines=["@All","",g.title||`初回${idx+1}`,g.plan];
+
+ lines.push(...getPhotoSummary(g));
+
+ const grouped={};
+ g.assignments.forEach(a=>{
+   if(!grouped[a.time])grouped[a.time]=[];
+   grouped[a.time].push(a);
+ });
+
+ Object.keys(grouped).forEach(t=>{
+   const casts=grouped[t].map(a=>a.cast).filter(Boolean);
+   if(casts.length) lines.push(`${t}${casts.join("　")}`);
+ });
+
+ return lines;
+}
+function updateCurrentGroupLineText(){
+ const box=document.getElementById("groupLineText");
+ if(box)box.value=currentGroupLineLines().join("\n");
+}
+function updateLineText(){
+ updateCurrentGroupLineText();
+}
+async function copyCurrentGroupLine(){
+ updateCurrentGroupLineText();
+ const box=document.getElementById("groupLineText");
+ if(!box)return;
+ try{
+   await navigator.clipboard.writeText(box.value);
+   alert("この初回のLINE用テキストをコピーしました");
+ }catch(e){
+   box.select();
+   document.execCommand("copy");
+   alert("コピーしました");
+ }
+}
+
+ensureInitial();
+updateAttendanceCount();
+renderCasts();
+renderTabs();
+renderGroupEditor();
+detectConflicts();
+updateLineText();
+</script>
+</body>
+</html>
